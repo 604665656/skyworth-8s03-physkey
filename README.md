@@ -1,6 +1,8 @@
-# 创维 8S03 / 42E600Y 机身按键改造：一键切换 HDMI
+# 创维 8S03 / 42E600Y 机身按键改造：一键切换 HDMI · 红外共用遥控器
 
 > 用电视自带的机身按键直接切 HDMI 输入源。不需要遥控器、不需要联网、不需要买任何硬件。
+>
+> 附带：**让投影仪遥控器顺手把电视也控了** —— 一个遥控器管两台设备。
 
 适用机型：**创维 42E600Y**（机芯 **8S03**，MStar `amber3` / `BD_MST029B_CUS36_A3`）
 固件验证版本：`V1.0.6.0` / SVN `1917E` / Android 4.0.3 (IML74K, userdebug, test-keys)
@@ -344,6 +346,63 @@ adb shell am broadcast -a android.intent.action.MASTER_CLEAR
 
 ---
 
-## 九、License
+## 九、红外共用遥控器
+
+投影仪（HY300 PRO）的遥控器按下去，投影仪照常有反应，**电视也同时响应音量、方向、确认**。
+
+不需要拆机、不需要焊接、不需要买万能遥控器。电视本来就带红外接收头（`event0` = `Skyworth Smart TV IR Receiver`，`Phys=/dev/ir`），
+背后是通用的 NEC 解码器，**只是被引导码限制成只认创维自家遥控器**。
+
+把引导码改成投影仪遥控器的地址码，就能解出它的键：
+
+```bash
+/system/bin/ioctl -l 4 -a 4 /dev/ir 0x4004750f 0xff00   # 地址 0x00 / 反码 0xFF
+```
+
+然后 `irremote.sh` 把解出的键翻译成 Android 键值注入回去。
+
+| 投影仪遥控 | 电视 | 状态 |
+|---|---|---|
+| 音量 + / − | 音量 + / − | ✅ 实测 |
+| 方向 ↑ / ↓ | 方向 ↑ / ↓ | ✅ 实测 |
+| OK | 确认 | ✅ 实测 |
+| 方向 ← / → | 方向 ← / → | ⚠️ 推断，待逐键确认 |
+| 主页 | 主页 | ⚠️ 推断，待逐键确认 |
+| 返回 | 已停用 | 会让电视界面崩，见下文 |
+
+### 三个必须知道的坑
+
+1. **引导码只能写一次。** 写「守夜」循环每 300ms 重写一次，会把正在接收的 NEC 帧打断（一帧 68ms），
+   结果是红外中断在涨、一个事件都解不出来。实测：守夜版 IRQ +291 / 0 事件；只写一次 IRQ +455 / 13 次全解出。
+2. **ioctl 必须打到 `/dev/ir`。** 打到 `/dev/input/event0` 返回 `ENOTTY`，重定向掉 stderr 就完全无声。
+3. **`event0` 只能有一个读进程。** evdev 不是广播，两个 `getevent` 同时读会把事件瓜分掉。
+
+### 不要用红外发射
+
+`SendKey`（`0x4004750e`）看起来能省掉人工试码，实测**发一次电视直接重启**。本项目只做接收。
+
+### 返回键为什么默认关掉
+
+注入 `BACK` 后电视会间歇性界面消失。logcat 抓到的铁证：
+
+```
+20:47:11.487  Process com.skyworth.sky_app_atv (pid 3709) has died.
+20:47:11      irremote.log: KEY_FAVORITES -> 4      ← 注入的 BACK，同一毫秒
+20:47:14.479  FATAL EXCEPTION: main
+              java.lang.IllegalArgumentException: The surface has been released
+                at com.tvos.impl.PlayerImpl._setVideoSurface(Native Method)
+```
+
+在 `RootActivity` 上按返回 → ATV 应用结束 → tvos 播放器 Surface 悬空 → 接手的桌面在
+`surfaceCreated` 里崩，连锁崩两次。**这是固件自带 bug**（守护启动前也崩过一次），
+但注入 BACK 能稳定复现。用焦点判断兜不住（主界面被覆盖时 `mFocusedApp` 查不到它）。
+
+要恢复：`irmap.conf` 里取消 `#KEY_FAVORITES  4` 那行的注释。
+
+完整技术细节、ioctl 命令表、解码器阈值、排查手册见 **[docs/ir-remote-sharing.md](docs/ir-remote-sharing.md)**。
+
+---
+
+## 十、License
 
 MIT

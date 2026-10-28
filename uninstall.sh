@@ -45,6 +45,8 @@ done
 
 info "停止守护进程"
 A shell "for p in \$(/system/bin/busybox ps | /system/bin/busybox grep '[p]hyskey.sh' | /system/bin/busybox awk '{print \$1}'); do /system/bin/kill \$p 2>/dev/null; done" >/dev/null 2>&1 || true
+A shell "for p in \$(/system/bin/busybox ps | /system/bin/busybox grep '[i]rremote.sh' | /system/bin/busybox awk '{print \$1}'); do /system/bin/kill \$p 2>/dev/null; done" >/dev/null 2>&1 || true
+A shell "for p in \$(/system/bin/busybox ps | /system/bin/busybox grep '[e]vent0' | /system/bin/busybox awk '{print \$1}'); do /system/bin/kill \$p 2>/dev/null; done" >/dev/null 2>&1 || true
 
 info "挂载 /system 可写"
 A shell mount -o remount,rw /system >/dev/null 2>&1 || die "无法挂载 /system 为可写"
@@ -64,6 +66,7 @@ A shell /system/bin/busybox rm -rf "$DEST"
 
 info "清理日志与锁文件"
 A shell /system/bin/busybox rm -f /data/local/tmp/physkey.log /dev/setsrc.lock
+A shell /system/bin/busybox rm -f /data/local/tmp/irremote.log /data/local/tmp/irraw.log /data/local/tmp/ir_unknown.log /data/local/tmp/irmap.conf
 
 echo
 green "=============================="

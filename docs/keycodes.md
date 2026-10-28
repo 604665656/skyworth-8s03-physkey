@@ -18,6 +18,7 @@ adb shell cat /proc/bus/input/devices
 | `event12` | `Vendor_3697_Product_0003` | 触摸/传感器 |
 
 > `event0` 的存在说明电视自带红外接收头 —— 这意味着任何能发 NEC 红外的设备（万能遥控器、带红外的手机）都能控制它，不必买原厂遥控器。
+> 实际落地见 **[ir-remote-sharing.md](ir-remote-sharing.md)**：把引导码改成目标遥控器的地址码，就能解出它的键。
 
 ## 2. 机身按键的处理链路
 

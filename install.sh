@@ -6,6 +6,9 @@
 #   ./install.sh 192.168.1.100      # 通过网络 adb
 #   ./install.sh                    # 通过 USB adb（已连接单台设备时）
 #
+# 可选环境变量:
+#   WITH_IR=1 ./install.sh 192.168.1.100    # 同时安装「红外共用遥控器」
+#
 # 前置: 电视已开 ADB 网络调试(5555)，且可 adb root
 # ============================================================
 set -euo pipefail
@@ -112,6 +115,38 @@ else
   red "守护进程未启动，重启后会自动拉起"
 fi
 
+# ---------- 8. 可选：红外共用遥控器 ----------
+if [ "${WITH_IR:-0}" = "1" ]; then
+  info "安装红外共用遥控器"
+  for f in /dev/ir /system/bin/ioctl /dev/input/event0; do
+    A shell "[ -e $f ] && echo ok" 2>/dev/null | grep -q ok || die "缺少 $f，红外功能不可用"
+  done
+  A push "$HERE/scripts/irremote.sh" "$DEST/irremote.sh" >/dev/null
+  A push "$HERE/scripts/irmap.conf"  "$DEST/irmap.conf"  >/dev/null
+  A shell chmod 755 "$DEST/irremote.sh"
+  A shell sh -n "$DEST/irremote.sh" || die "irremote.sh 语法检查失败"
+
+  # 映射表放可写分区，方便随时改，改完立即生效
+  A shell "/system/bin/busybox cp $DEST/irmap.conf /data/local/tmp/irmap.conf"
+
+  MARK_IR="tvkeys/irremote.sh"
+  if A shell "/system/bin/busybox grep -q '$MARK_IR' $BOOT 2>/dev/null && echo yes" | grep -q yes; then
+    info "  红外自启已存在，跳过注入"
+  else
+    A shell "echo '/system/bin/busybox setsid /system/bin/sh $DEST/irremote.sh </dev/null >/dev/null 2>&1 &' >> $BOOT"
+  fi
+
+  # event0 只能有一个读进程，先把幽灵进程清掉
+  A shell "/system/bin/busybox ps | /system/bin/busybox grep '[e]vent0' | /system/bin/busybox awk '{print \$1}' | /system/bin/busybox xargs -r /system/bin/busybox kill -9" >/dev/null 2>&1 || true
+  A shell "/system/bin/busybox setsid /system/bin/sh $DEST/irremote.sh </dev/null >/dev/null 2>&1 & /system/bin/busybox usleep 2000000" >/dev/null 2>&1 || true
+
+  if A shell "/system/bin/busybox ps | /system/bin/busybox grep -c '[e]vent0'" 2>/dev/null | grep -q "[1-9]"; then
+    green "红外守护已运行（引导码写死 0xff00，对应 HY300 PRO 遥控器）"
+  else
+    red "红外守护未启动，重启后会自动拉起"
+  fi
+fi
+
 echo
 green "=============================="
 green " 安装完成"
@@ -120,6 +155,13 @@ echo
 echo "按键功能:"
 echo "  频道 +  →  HDMI2"
 echo "  频道 -  →  HDMI1"
+if [ "${WITH_IR:-0}" = "1" ]; then
+  echo
+  echo "红外共用遥控器:"
+  echo "  音量 +/-  方向上下  OK  → 电视"
+  echo "  返回键默认停用（会让电视界面崩），改 /data/local/tmp/irmap.conf 可启用"
+  echo "  未识别的键会记录到 /data/local/tmp/ir_unknown.log"
+fi
 echo
 echo "建议重启一次以验证自启:"
 echo "  adb -s $SERIAL reboot"
