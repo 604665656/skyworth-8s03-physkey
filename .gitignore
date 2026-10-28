@@ -1,0 +1,12 @@
+# 日志与临时文件
+*.log
+*.tmp
+
+# 从设备 dump 出来的东西（体积大且与本项目无关）
+*.apk
+*.odex
+*.jar
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
